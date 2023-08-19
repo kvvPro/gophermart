@@ -1,11 +1,19 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/kvvPro/gophermart/internal/model"
+
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"go.uber.org/zap"
 )
@@ -128,8 +136,39 @@ func (srv *Server) PingHandle(w http.ResponseWriter, r *http.Request) {
 
 func (srv *Server) Register(w http.ResponseWriter, r *http.Request) {
 
-	testbody := "OK!"
-	io.WriteString(w, testbody)
+	var user model.User
+
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "неверный формат запроса: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	reader := io.NopCloser(bytes.NewReader(data))
+	if err := json.NewDecoder(reader).Decode(&user); err != nil {
+		http.Error(w, "неверный формат запроса: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = srv.AddUser(context.Background(), &user)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		// check that user already exists (duplicated login)
+		if errors.As(err, &pgErr) && pgerrcode.UniqueViolation == pgErr.Code {
+			http.Error(w, "логин уже занят: "+err.Error(), http.StatusConflict)
+			return
+		}
+		// connection problems
+		if errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+			http.Error(w, "внутренняя ошибка сервера: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	body := "OK!"
+	io.WriteString(w, body)
 	w.WriteHeader(http.StatusOK)
 }
 

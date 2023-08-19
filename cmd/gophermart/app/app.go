@@ -4,9 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kvvPro/gophermart/cmd/gophermart/config"
 	"github.com/kvvPro/gophermart/internal/model"
+	"github.com/kvvPro/gophermart/internal/retry"
 	"github.com/kvvPro/gophermart/internal/storage"
 
 	"github.com/kvvPro/gophermart/internal/storage/postgres"
@@ -44,7 +48,28 @@ func (srv *Server) Ping(ctx context.Context) error {
 }
 
 func (srv *Server) AddUser(ctx context.Context, user *model.User) error {
-	return srv.storage.AddUser(ctx, user)
+	err := retry.Do(func() error {
+		return srv.storage.AddUser(ctx, user)
+	},
+		retry.RetryIf(func(errAttempt error) bool {
+			var pgErr *pgconn.PgError
+			if errors.As(errAttempt, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+				return true
+			}
+			return false
+		}),
+		retry.Attempts(3),
+		retry.InitDelay(1000*time.Millisecond),
+		retry.Step(2000*time.Millisecond),
+		retry.Context(ctx),
+	)
+
+	if err != nil {
+		Sugar.Errorln(err)
+		return err
+	}
+
+	return nil
 }
 
 func (srv *Server) CheckUser(ctx context.Context, user *model.User) error {

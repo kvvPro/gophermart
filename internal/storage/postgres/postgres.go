@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -48,7 +49,30 @@ func (s *PostgresStorage) Quit(ctx context.Context) {
 }
 
 func (s *PostgresStorage) AddUser(ctx context.Context, user *model.User) error {
+	transaction, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback(ctx)
+
+	addUserQuery := getAddUserQuery()
+	insertRes, err := s.pool.Exec(ctx, addUserQuery, user.Login, user.Password)
+	if err != nil {
+		return err
+	}
+	if insertRes.RowsAffected() == 0 {
+		return errors.New("can't add user")
+	}
+
+	transaction.Commit(ctx)
 	return nil
+}
+
+func getAddUserQuery() string {
+	return `
+	INSERT INTO public.users(login, password)
+		VALUES ($1, $2);
+	`
 }
 
 func (s *PostgresStorage) GetUser(ctx context.Context, user *model.User) error {
@@ -57,6 +81,20 @@ func (s *PostgresStorage) GetUser(ctx context.Context, user *model.User) error {
 
 func getInitQuery() string {
 	return `
-	
+	-- Table: public.users
+
+	-- DROP TABLE IF EXISTS public.users;
+
+	CREATE TABLE IF NOT EXISTS public.users
+	(
+		login character varying(50) NOT NULL,
+		password character varying,
+		CONSTRAINT users_pkey PRIMARY KEY (login)
+	)
+
+	TABLESPACE pg_default;
+
+	ALTER TABLE IF EXISTS public.users
+		OWNER to postgres;
 	`
 }
