@@ -22,7 +22,7 @@ func NewPSQLStorage(ctx context.Context, connection string) (*PostgresStorage, e
 		return nil, err
 	}
 
-	defer pool.Close()
+	//defer pool.Close()
 
 	_, err = pool.Exec(ctx, init)
 	if err != nil {
@@ -55,7 +55,7 @@ func (s *PostgresStorage) AddUser(ctx context.Context, user *model.User) error {
 	}
 	defer transaction.Rollback(ctx)
 
-	addUserQuery := getAddUserQuery()
+	addUserQuery := addUserQuery()
 	insertRes, err := s.pool.Exec(ctx, addUserQuery, user.Login, user.Password)
 	if err != nil {
 		return err
@@ -68,15 +68,31 @@ func (s *PostgresStorage) AddUser(ctx context.Context, user *model.User) error {
 	return nil
 }
 
-func getAddUserQuery() string {
+func addUserQuery() string {
 	return `
 	INSERT INTO public.users(login, password)
 		VALUES ($1, $2);
 	`
 }
 
-func (s *PostgresStorage) GetUser(ctx context.Context, user *model.User) error {
-	return nil
+func (s *PostgresStorage) GetUser(ctx context.Context, user *model.User) (*model.User, error) {
+	var userInfo model.User
+	getUserQuery := getUserQuery()
+	result := s.pool.QueryRow(ctx, getUserQuery, user.Login)
+	if err := result.Scan(&userInfo.Login, &userInfo.Password); err != nil {
+		return nil, err
+	}
+
+	return &userInfo, nil
+}
+
+func getUserQuery() string {
+	return `
+	SELECT login, password
+		FROM public.users
+	WHERE
+		login = $1
+	`
 }
 
 func getInitQuery() string {

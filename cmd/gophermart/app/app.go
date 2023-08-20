@@ -72,8 +72,32 @@ func (srv *Server) AddUser(ctx context.Context, user *model.User) error {
 	return nil
 }
 
-func (srv *Server) CheckUser(ctx context.Context, user *model.User) error {
-	return srv.storage.GetUser(ctx, user)
+func (srv *Server) CheckUser(ctx context.Context, user *model.User) (*model.User, error) {
+	var userInfo *model.User
+	var err error
+	err = retry.Do(func() error {
+		userInfo, err = srv.storage.GetUser(ctx, user)
+		return err
+	},
+		retry.RetryIf(func(errAttempt error) bool {
+			var pgErr *pgconn.PgError
+			if errors.As(errAttempt, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+				return true
+			}
+			return false
+		}),
+		retry.Attempts(3),
+		retry.InitDelay(1000*time.Millisecond),
+		retry.Step(2000*time.Millisecond),
+		retry.Context(ctx),
+	)
+
+	if err != nil {
+		Sugar.Errorln(err)
+		return nil, err
+	}
+
+	return userInfo, nil
 }
 
 func (srv *Server) Run(ctx context.Context, srvFlags *config.ServerFlags) {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kvvPro/gophermart/cmd/gophermart/auth"
 	"github.com/kvvPro/gophermart/internal/model"
 
 	"github.com/jackc/pgerrcode"
@@ -167,12 +168,66 @@ func (srv *Server) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// generate auth token
+	token, err := auth.BuildJWTString(user.Login, user.Password)
+	if err != nil {
+		http.Error(w, "ошибка при генерации токена: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Add("Authorization", token)
+
 	body := "OK!"
 	io.WriteString(w, body)
 	w.WriteHeader(http.StatusOK)
 }
 
 func (srv *Server) Auth(w http.ResponseWriter, r *http.Request) {
+
+	var user model.User
+
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "неверный формат запроса: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	reader := io.NopCloser(bytes.NewReader(data))
+	if err := json.NewDecoder(reader).Decode(&user); err != nil {
+		http.Error(w, "неверный формат запроса: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	userInfo, err := srv.CheckUser(context.Background(), &user)
+	// authentication failed, password is invalid
+	// or login wasn't found
+	if err != nil {
+		var pgErr *pgconn.PgError
+
+		// if errors.Is(err, pgx.ErrNoRows) || userInfo.Login == user.Login && userInfo.Password == user.Password {
+		// 	http.Error(w, "неверная пара логин/пароль: "+err.Error(), http.StatusUnauthorized)
+		// 	return
+		// }
+
+		// connection problems
+		if errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+			http.Error(w, "внутренняя ошибка сервера: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// other errros
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// get token
+	token, err := auth.BuildJWTString(userInfo.Login, userInfo.Password)
+	if err != nil {
+		http.Error(w, "ошибка при генерации токена: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Add("Authorization", token)
 
 	testbody := "OK!"
 	io.WriteString(w, testbody)
