@@ -17,8 +17,8 @@ type Claims struct {
 	UserPass  string
 }
 
-const TOKEN_EXP = time.Hour * 3
-const SECRET_KEY = "supersecretkey"
+const tokenExp = time.Hour * 3
+const secretKey = "supersecretkey"
 
 // BuildJWTString создаёт токен и возвращает его в виде строки.
 func BuildJWTString(login string, pass string) (string, error) {
@@ -26,7 +26,7 @@ func BuildJWTString(login string, pass string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			// когда создан токен
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TOKEN_EXP)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenExp)),
 		},
 		// собственное утверждение
 		UserLogin: login,
@@ -35,7 +35,7 @@ func BuildJWTString(login string, pass string) (string, error) {
 
 	// создаём строку токена
 	// token.Method = &jwt.SigningMethodHMAC{}
-	tokenString, err := token.SignedString([]byte(SECRET_KEY))
+	tokenString, err := token.SignedString([]byte(secretKey))
 	if err != nil {
 		return "", err
 	}
@@ -51,7 +51,7 @@ func GetUserInfo(tokenString string) (*model.User, error) {
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 			}
-			return []byte(SECRET_KEY), nil
+			return []byte(secretKey), nil
 		})
 	if err != nil {
 		return nil, err

@@ -104,11 +104,11 @@ func (s *PostgresStorage) UploadOrder(ctx context.Context, orderID string, user 
 
 	query := getOrderInfoQuery()
 	result := s.pool.QueryRow(ctx, query, orderID)
-	switch err := result.Scan(orderInfo.ID,
-		orderInfo.Owner,
-		orderInfo.UploadDate,
-		orderInfo.Status,
-		orderInfo.Bonus); err {
+	switch err := result.Scan(&orderInfo.ID,
+		&orderInfo.Owner,
+		&orderInfo.UploadDate,
+		&orderInfo.Status,
+		&orderInfo.Bonus); err {
 	case pgx.ErrNoRows:
 		// заказа нет - создаем новый
 		insert := getAddOrderQuery()

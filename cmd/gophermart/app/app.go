@@ -142,7 +142,6 @@ func (srv *Server) Run(ctx context.Context, srvFlags *config.ServerFlags) {
 	r := chi.NewMux()
 	r.Use(GzipMiddleware,
 		WithLogging)
-	// r.Use(app.WithLogging)
 	r.Get("/ping", http.HandlerFunc(srv.PingHandle))
 	r.Post("/api/user/register", http.HandlerFunc(srv.Register))
 	r.Post("/api/user/login", http.HandlerFunc(srv.Auth))

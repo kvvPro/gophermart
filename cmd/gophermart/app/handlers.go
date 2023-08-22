@@ -287,40 +287,39 @@ func (srv *Server) PutOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if status == model.OrderAlreadyUploaded {
+		w.WriteHeader(http.StatusOK)
 		testbody := "номер заказа уже был загружен этим пользователем"
 		io.WriteString(w, testbody)
-		w.WriteHeader(http.StatusOK)
 	} else if status == model.OrderAcceptedToProcessing {
+		w.WriteHeader(http.StatusAccepted)
 		testbody := "новый номер заказа принят в обработку"
 		io.WriteString(w, testbody)
-		w.WriteHeader(http.StatusAccepted)
 	}
 }
 
 func (srv *Server) GetOrders(w http.ResponseWriter, r *http.Request) {
-
+	w.WriteHeader(http.StatusOK)
 	testbody := "OK!"
 	io.WriteString(w, testbody)
-	w.WriteHeader(http.StatusOK)
 }
 
 func (srv *Server) GetBalance(w http.ResponseWriter, r *http.Request) {
 
+	w.WriteHeader(http.StatusOK)
 	testbody := "OK!"
 	io.WriteString(w, testbody)
-	w.WriteHeader(http.StatusOK)
 }
 
 func (srv *Server) Withdraw(w http.ResponseWriter, r *http.Request) {
 
+	w.WriteHeader(http.StatusOK)
 	testbody := "OK!"
 	io.WriteString(w, testbody)
-	w.WriteHeader(http.StatusOK)
 }
 
 func (srv *Server) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
 
+	w.WriteHeader(http.StatusOK)
 	testbody := "OK!"
 	io.WriteString(w, testbody)
-	w.WriteHeader(http.StatusOK)
 }
