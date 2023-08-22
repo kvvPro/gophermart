@@ -124,7 +124,7 @@ func (srv *Server) UploadOrder(ctx context.Context, orderID string, userInfo *mo
 	if err != nil {
 
 		Sugar.Errorln(err)
-		result = model.OtherError
+		// result = model.OtherError
 
 		var pgErr *pgconn.PgError
 		// connection problems

@@ -49,7 +49,8 @@ const (
 type EndPointStatus int
 
 const (
-	OrderAlreadyUploaded EndPointStatus = iota
+	OrderUnknownStatus EndPointStatus = iota - 1
+	OrderAlreadyUploaded
 	OrderAcceptedToProcessing
 	OrderAlreadyUploadedByAnotherUser
 	InvalidOrderID

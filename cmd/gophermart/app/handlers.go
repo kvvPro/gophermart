@@ -298,6 +298,7 @@ func (srv *Server) PutOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (srv *Server) GetOrders(w http.ResponseWriter, r *http.Request) {
+
 	w.WriteHeader(http.StatusOK)
 	testbody := "OK!"
 	io.WriteString(w, testbody)

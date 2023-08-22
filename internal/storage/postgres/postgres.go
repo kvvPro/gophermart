@@ -129,11 +129,11 @@ func (s *PostgresStorage) UploadOrder(ctx context.Context, orderID string, user 
 		// автор заказа тот же
 		if orderInfo.Owner == user.Login {
 			status = model.OrderAlreadyUploaded
-		}
-		if orderInfo.Owner != user.Login {
+			return status, nil
+		} else {
 			status = model.OrderAlreadyUploadedByAnotherUser
+			return status, errors.New("номер заказа уже был загружен другим пользователем")
 		}
-		return status, nil
 	default:
 		return model.OtherError, err
 	}
@@ -188,7 +188,7 @@ func getInitQuery() string {
 	(
 		id character varying NOT NULL,
 		owner character varying NOT NULL,
-		upload_date date NOT NULL,
+		upload_date timestamp with time zone NOT NULL,
 		status character varying NOT NULL,
 		bonus double precision NOT NULL,
 		CONSTRAINT orders_pkey PRIMARY KEY (id),
