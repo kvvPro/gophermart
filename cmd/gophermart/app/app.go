@@ -28,7 +28,7 @@ type Server struct {
 func NewServer(ctx context.Context, config *config.ServerFlags) (*Server, error) {
 	st, err := postgres.NewPSQLStorage(ctx, config.DBConnection)
 	if err != nil {
-		return nil, errors.New("cannot create storage for server")
+		return nil, errors.New("cannot create storage for server" + err.Error())
 	}
 
 	return &Server{
@@ -178,6 +178,115 @@ func (srv *Server) OrderList(ctx context.Context, userInfo *model.User) ([]*mode
 	}
 
 	return orders, model.OrderListExists, nil
+}
+
+func (srv *Server) GetCurrentBalance(ctx context.Context, userInfo *model.User) (*model.Balance, error) {
+	var err error
+	var balance *model.Balance
+
+	err = retry.Do(func() error {
+		balance, err = srv.storage.GetBalance(ctx, userInfo)
+		return err
+	},
+		retry.RetryIf(func(errAttempt error) bool {
+			var pgErr *pgconn.PgError
+			if errors.As(errAttempt, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+				return true
+			}
+			return false
+		}),
+		retry.Attempts(3),
+		retry.InitDelay(1000*time.Millisecond),
+		retry.Step(2000*time.Millisecond),
+		retry.Context(ctx),
+	)
+
+	if err != nil {
+
+		Sugar.Errorln(err)
+		return nil, err
+	}
+
+	return balance, nil
+}
+
+func (srv *Server) RequestWithdraw(ctx context.Context, withdrawalInfo *model.Withdrawal) (model.EndPointStatus, error) {
+	var err error
+	var result model.EndPointStatus
+
+	err = retry.Do(func() error {
+		result, err = srv.storage.RequestWithdrawal(ctx, withdrawalInfo)
+		return err
+	},
+		retry.RetryIf(func(errAttempt error) bool {
+			var pgErr *pgconn.PgError
+			if errors.As(errAttempt, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+				return true
+			}
+			return false
+		}),
+		retry.Attempts(3),
+		retry.InitDelay(1000*time.Millisecond),
+		retry.Step(2000*time.Millisecond),
+		retry.Context(ctx),
+	)
+
+	if err != nil {
+
+		Sugar.Errorln(err)
+
+		var pgErr *pgconn.PgError
+		// connection problems
+		if errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+			result = model.ConnectionError
+		}
+
+		return result, err
+	}
+
+	return result, nil
+}
+
+func (srv *Server) AllWithdrawals(ctx context.Context, user *model.User) ([]*model.Withdrawal, model.EndPointStatus, error) {
+	var err error
+	var withdrawals []*model.Withdrawal
+
+	err = retry.Do(func() error {
+		withdrawals, err = srv.storage.GetAllWithdrawals(ctx, user)
+		return err
+	},
+		retry.RetryIf(func(errAttempt error) bool {
+			var pgErr *pgconn.PgError
+			if errors.As(errAttempt, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+				return true
+			}
+			return false
+		}),
+		retry.Attempts(3),
+		retry.InitDelay(1000*time.Millisecond),
+		retry.Step(2000*time.Millisecond),
+		retry.Context(ctx),
+	)
+
+	if err != nil {
+
+		Sugar.Errorln(err)
+
+		var pgErr *pgconn.PgError
+		// connection problems
+		if errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+			return nil, model.ConnectionError, err
+		}
+
+		return nil, model.OtherError, err
+	}
+
+	// check data
+	if len(withdrawals) == 0 {
+		return nil, model.WithdrawalsNoData, nil
+	}
+
+	return withdrawals, model.WithdrawalsDataExists, nil
 }
 
 func (srv *Server) Run(ctx context.Context, srvFlags *config.ServerFlags) {

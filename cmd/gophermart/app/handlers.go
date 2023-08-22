@@ -253,8 +253,8 @@ func (srv *Server) Auth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Add("Authorization", "Bearer "+token)
 
-	testbody := "OK!"
-	io.WriteString(w, testbody)
+	body := "OK!"
+	io.WriteString(w, body)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -288,12 +288,12 @@ func (srv *Server) PutOrder(w http.ResponseWriter, r *http.Request) {
 
 	if status == model.OrderAlreadyUploaded {
 		w.WriteHeader(http.StatusOK)
-		testbody := "номер заказа уже был загружен этим пользователем"
-		io.WriteString(w, testbody)
+		body := "номер заказа уже был загружен этим пользователем"
+		io.WriteString(w, body)
 	} else if status == model.OrderAcceptedToProcessing {
 		w.WriteHeader(http.StatusAccepted)
-		testbody := "новый номер заказа принят в обработку"
-		io.WriteString(w, testbody)
+		body := "новый номер заказа принят в обработку"
+		io.WriteString(w, body)
 	}
 }
 
@@ -310,8 +310,8 @@ func (srv *Server) GetOrders(w http.ResponseWriter, r *http.Request) {
 
 	if status == model.OrderListEmpty {
 		w.WriteHeader(http.StatusNoContent)
-		testbody := "отсутствуют данные по запросу"
-		io.WriteString(w, testbody)
+		body := "отсутствуют данные по запросу"
+		io.WriteString(w, body)
 	} else if status == model.OrderListExists {
 		bodyBuffer := new(bytes.Buffer)
 		json.NewEncoder(bodyBuffer).Encode(orders)
@@ -325,21 +325,96 @@ func (srv *Server) GetOrders(w http.ResponseWriter, r *http.Request) {
 
 func (srv *Server) GetBalance(w http.ResponseWriter, r *http.Request) {
 
+	userInfo, _ := r.Context().Value(ctxKey("userInfo")).(*model.User)
+
+	balance, err := srv.GetCurrentBalance(context.Background(), userInfo)
+	if err != nil {
+		// other errros
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	bodyBuffer := new(bytes.Buffer)
+	json.NewEncoder(bodyBuffer).Encode(balance)
+	body := bodyBuffer.String()
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	testbody := "OK!"
-	io.WriteString(w, testbody)
+	io.WriteString(w, body)
+
 }
 
 func (srv *Server) Withdraw(w http.ResponseWriter, r *http.Request) {
 
-	w.WriteHeader(http.StatusOK)
-	testbody := "OK!"
-	io.WriteString(w, testbody)
+	var withdrawInfo *model.Withdrawal
+
+	userInfo, _ := r.Context().Value(ctxKey("userInfo")).(*model.User)
+
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "неверный формат запроса: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	reader := io.NopCloser(bytes.NewReader(data))
+	if err := json.NewDecoder(reader).Decode(&withdrawInfo); err != nil {
+		http.Error(w, "неверный формат запроса: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err = luhn.Validate(withdrawInfo.OrderID)
+	if err != nil {
+		http.Error(w, "неверный формат номера заказа: "+err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+
+	withdrawInfo.ProcessedDate = time.Now()
+	withdrawInfo.User = userInfo.Login
+
+	status, err := srv.RequestWithdraw(context.Background(), withdrawInfo)
+	if err != nil {
+		// other errros
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if status == model.WithdrawalAccepted {
+		w.WriteHeader(http.StatusOK)
+		body := "списание одобрено"
+		io.WriteString(w, body)
+	} else if status == model.WithdrawalAlreadyRequested {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		body := "списание по этому заказу уже осуществлено ранее"
+		io.WriteString(w, body)
+	} else if status == model.WithdrawalNotEnoughBonuses || status == model.WithdrawalNoBonuses {
+		w.WriteHeader(http.StatusPaymentRequired)
+		body := "на счету недостаточно средств"
+		io.WriteString(w, body)
+	}
 }
 
 func (srv *Server) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
 
-	w.WriteHeader(http.StatusOK)
-	testbody := "OK!"
-	io.WriteString(w, testbody)
+	userInfo, _ := r.Context().Value(ctxKey("userInfo")).(*model.User)
+
+	withdrawals, status, err := srv.AllWithdrawals(context.Background(), userInfo)
+	if err != nil {
+		// other errros
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if status == model.WithdrawalsNoData {
+		w.WriteHeader(http.StatusNoContent)
+		body := "нет ни одного списания"
+		io.WriteString(w, body)
+	} else if status == model.WithdrawalsDataExists {
+		bodyBuffer := new(bytes.Buffer)
+		json.NewEncoder(bodyBuffer).Encode(withdrawals)
+		body := bodyBuffer.String()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, body)
+	}
 }

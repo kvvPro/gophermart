@@ -10,9 +10,9 @@ type User struct {
 type Order struct {
 	ID         string    `json:"number"`
 	Status     string    `json:"status"`
-	Bonus      int64     `json:"accrual"`
+	Bonus      float64   `json:"accrual"`
 	UploadDate time.Time `json:"uploaded_at"`
-	Owner      string    // user login, who uploaded this order
+	Owner      string    `json:"-"` // user login, who uploaded this order
 }
 
 const (
@@ -27,16 +27,17 @@ type Balance struct {
 	Withdrawn float64 `json:"withdrawn"`
 }
 
-type Transaction struct {
+type Withdrawal struct {
 	OrderID       string    `json:"order"`
 	Sum           float64   `json:"sum"`
 	ProcessedDate time.Time `json:"processed_at,omitempty"`
+	User          string    `json:"-"`
 }
 
 type OrderBonus struct {
-	ID      string `json:"order"`
-	Status  string `json:"status"`
-	Accrual int64  `json:"accrual"`
+	ID      string  `json:"order"`
+	Status  string  `json:"status"`
+	Accrual float64 `json:"accrual"`
 }
 
 const (
@@ -56,6 +57,12 @@ const (
 	OrderAcceptedToProcessing
 	OrderAlreadyUploadedByAnotherUser
 	InvalidOrderID
+	WithdrawalNoBonuses
+	WithdrawalNotEnoughBonuses
+	WithdrawalAccepted
+	WithdrawalAlreadyRequested
+	WithdrawalsNoData
+	WithdrawalsDataExists
 	ConnectionError
 	OtherError
 )
