@@ -317,8 +317,8 @@ func (srv *Server) GetOrders(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(bodyBuffer).Encode(orders)
 		body := bodyBuffer.String()
 
-		w.WriteHeader(http.StatusOK)
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 		io.WriteString(w, body)
 	}
 }
