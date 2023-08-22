@@ -162,6 +162,54 @@ func getAddOrderQuery() string {
 	`
 }
 
+func (s *PostgresStorage) GetAllOrders(ctx context.Context, user *model.User) ([]*model.Order, error) {
+
+	orders := []*model.Order{}
+
+	query := getAllOrdersQuery()
+	result, err := s.pool.Query(ctx, query, user.Login)
+	if err != nil {
+		return nil, err
+	}
+
+	defer result.Close()
+
+	for result.Next() {
+		var orderInfo model.Order
+		err = result.Scan(&orderInfo.ID,
+			&orderInfo.Owner,
+			&orderInfo.UploadDate,
+			&orderInfo.Status,
+			&orderInfo.Bonus)
+		if err != nil {
+			return nil, err
+		}
+		orders = append(orders, &orderInfo)
+	}
+
+	err = result.Err()
+	if err != nil {
+		return nil, err
+	}
+
+	return orders, nil
+}
+
+func getAllOrdersQuery() string {
+	return `
+	SELECT orders.id, 
+			orders.owner, 
+			orders.upload_date, 
+			orders.status, 
+			orders.bonus
+		FROM public.orders as orders
+	WHERE
+		orders.owner = $1
+	ORDER BY
+		orders.upload_date ASC
+	`
+}
+
 func getInitQuery() string {
 	return `
 	-- Table: public.users

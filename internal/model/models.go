@@ -50,6 +50,8 @@ type EndPointStatus int
 
 const (
 	OrderUnknownStatus EndPointStatus = iota - 1
+	OrderListEmpty
+	OrderListExists
 	OrderAlreadyUploaded
 	OrderAcceptedToProcessing
 	OrderAlreadyUploadedByAnotherUser

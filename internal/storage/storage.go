@@ -12,4 +12,5 @@ type Storage interface {
 	AddUser(ctx context.Context, user *model.User) error
 	GetUser(ctx context.Context, user *model.User) (*model.User, error)
 	UploadOrder(ctx context.Context, orderID string, user *model.User) (model.EndPointStatus, error)
+	GetAllOrders(ctx context.Context, user *model.User) ([]*model.Order, error)
 }

@@ -138,6 +138,48 @@ func (srv *Server) UploadOrder(ctx context.Context, orderID string, userInfo *mo
 	return result, nil
 }
 
+func (srv *Server) OrderList(ctx context.Context, userInfo *model.User) ([]*model.Order, model.EndPointStatus, error) {
+	var err error
+	var orders []*model.Order
+
+	err = retry.Do(func() error {
+		orders, err = srv.storage.GetAllOrders(ctx, userInfo)
+		return err
+	},
+		retry.RetryIf(func(errAttempt error) bool {
+			var pgErr *pgconn.PgError
+			if errors.As(errAttempt, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+				return true
+			}
+			return false
+		}),
+		retry.Attempts(3),
+		retry.InitDelay(1000*time.Millisecond),
+		retry.Step(2000*time.Millisecond),
+		retry.Context(ctx),
+	)
+
+	if err != nil {
+
+		Sugar.Errorln(err)
+
+		var pgErr *pgconn.PgError
+		// connection problems
+		if errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+			return nil, model.ConnectionError, err
+		}
+
+		return nil, model.OtherError, err
+	}
+
+	// check data
+	if len(orders) == 0 {
+		return nil, model.OrderListEmpty, nil
+	}
+
+	return orders, model.OrderListExists, nil
+}
+
 func (srv *Server) Run(ctx context.Context, srvFlags *config.ServerFlags) {
 	r := chi.NewMux()
 	r.Use(GzipMiddleware,

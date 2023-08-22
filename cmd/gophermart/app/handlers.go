@@ -299,9 +299,28 @@ func (srv *Server) PutOrder(w http.ResponseWriter, r *http.Request) {
 
 func (srv *Server) GetOrders(w http.ResponseWriter, r *http.Request) {
 
-	w.WriteHeader(http.StatusOK)
-	testbody := "OK!"
-	io.WriteString(w, testbody)
+	userInfo, _ := r.Context().Value(ctxKey("userInfo")).(*model.User)
+
+	orders, status, err := srv.OrderList(context.Background(), userInfo)
+	if err != nil {
+		// other errros
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if status == model.OrderListEmpty {
+		w.WriteHeader(http.StatusNoContent)
+		testbody := "отсутствуют данные по запросу"
+		io.WriteString(w, testbody)
+	} else if status == model.OrderListExists {
+		bodyBuffer := new(bytes.Buffer)
+		json.NewEncoder(bodyBuffer).Encode(orders)
+		body := bodyBuffer.String()
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, body)
+	}
 }
 
 func (srv *Server) GetBalance(w http.ResponseWriter, r *http.Request) {
