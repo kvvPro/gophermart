@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kvvPro/gophermart/cmd/gophermart/auth"
+	"github.com/kvvPro/gophermart/internal/luhn"
 	"github.com/kvvPro/gophermart/internal/model"
 
 	"github.com/jackc/pgerrcode"
@@ -35,6 +36,8 @@ type (
 		responseData        *responseData
 	}
 )
+
+type ctxKey string
 
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	// записываем ответ, используя оригинальный http.ResponseWriter
@@ -117,6 +120,27 @@ func GzipMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(compressFunc)
 }
 
+func (srv *Server) CheckAuth(h http.Handler) http.Handler {
+	authFn := func(w http.ResponseWriter, r *http.Request) {
+		authHeader := strings.Split(r.Header.Get("Authorization"), "Bearer ")
+		if len(authHeader) != 2 {
+			http.Error(w, "malformed token", http.StatusUnauthorized)
+			return
+		}
+		token := authHeader[1]
+		userInfo, err := auth.GetUserInfo(token)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
+		newContext := context.WithValue(r.Context(), ctxKey("userInfo"), userInfo)
+
+		h.ServeHTTP(w, r.WithContext(newContext))
+	}
+	return http.HandlerFunc(authFn)
+}
+
 func (srv *Server) PingHandle(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -175,7 +199,7 @@ func (srv *Server) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Add("Authorization", token)
+	w.Header().Add("Authorization", "Bearer "+token)
 
 	body := "OK!"
 	io.WriteString(w, body)
@@ -227,18 +251,50 @@ func (srv *Server) Auth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Add("Authorization", token)
+	w.Header().Add("Authorization", "Bearer "+token)
 
 	testbody := "OK!"
 	io.WriteString(w, testbody)
 	w.WriteHeader(http.StatusOK)
 }
 
-func (srv *Server) PutOrders(w http.ResponseWriter, r *http.Request) {
+func (srv *Server) PutOrder(w http.ResponseWriter, r *http.Request) {
 
-	testbody := "OK!"
-	io.WriteString(w, testbody)
-	w.WriteHeader(http.StatusOK)
+	userInfo, _ := r.Context().Value(ctxKey("userInfo")).(*model.User)
+
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "неверный формат запроса: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	orderID := string(data)
+	err = luhn.Validate(orderID)
+	if err != nil {
+		http.Error(w, "неверный формат номера заказа: "+err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+
+	status, err := srv.UploadOrder(context.Background(), orderID, userInfo)
+	if err != nil {
+		if status == model.OrderAlreadyUploadedByAnotherUser {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		// other errros
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if status == model.OrderAlreadyUploaded {
+		testbody := "номер заказа уже был загружен этим пользователем"
+		io.WriteString(w, testbody)
+		w.WriteHeader(http.StatusOK)
+	} else if status == model.OrderAcceptedToProcessing {
+		testbody := "новый номер заказа принят в обработку"
+		io.WriteString(w, testbody)
+		w.WriteHeader(http.StatusAccepted)
+	}
 }
 
 func (srv *Server) GetOrders(w http.ResponseWriter, r *http.Request) {

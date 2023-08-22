@@ -100,6 +100,44 @@ func (srv *Server) CheckUser(ctx context.Context, user *model.User) (*model.User
 	return userInfo, nil
 }
 
+func (srv *Server) UploadOrder(ctx context.Context, orderID string, userInfo *model.User) (model.EndPointStatus, error) {
+	var err error
+	var result model.EndPointStatus
+
+	err = retry.Do(func() error {
+		result, err = srv.storage.UploadOrder(ctx, orderID, userInfo)
+		return err
+	},
+		retry.RetryIf(func(errAttempt error) bool {
+			var pgErr *pgconn.PgError
+			if errors.As(errAttempt, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+				return true
+			}
+			return false
+		}),
+		retry.Attempts(3),
+		retry.InitDelay(1000*time.Millisecond),
+		retry.Step(2000*time.Millisecond),
+		retry.Context(ctx),
+	)
+
+	if err != nil {
+
+		Sugar.Errorln(err)
+		result = model.OtherError
+
+		var pgErr *pgconn.PgError
+		// connection problems
+		if errors.As(err, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+			result = model.ConnectionError
+		}
+
+		return result, err
+	}
+
+	return result, nil
+}
+
 func (srv *Server) Run(ctx context.Context, srvFlags *config.ServerFlags) {
 	r := chi.NewMux()
 	r.Use(GzipMiddleware,
@@ -108,11 +146,16 @@ func (srv *Server) Run(ctx context.Context, srvFlags *config.ServerFlags) {
 	r.Get("/ping", http.HandlerFunc(srv.PingHandle))
 	r.Post("/api/user/register", http.HandlerFunc(srv.Register))
 	r.Post("/api/user/login", http.HandlerFunc(srv.Auth))
-	r.Post("/api/user/orders", http.HandlerFunc(srv.PutOrders))
-	r.Get("/api/user/orders", http.HandlerFunc(srv.GetOrders))
-	r.Get("/api/user/balance", http.HandlerFunc(srv.GetBalance))
-	r.Post("/api/user/balance/withdraw", http.HandlerFunc(srv.Withdraw))
-	r.Get("/api/user/withdrawals", http.HandlerFunc(srv.GetWithdrawals))
+
+	r.Group(func(r chi.Router) {
+		r.Use(srv.CheckAuth)
+
+		r.Post("/api/user/orders", http.HandlerFunc(srv.PutOrder))
+		r.Get("/api/user/orders", http.HandlerFunc(srv.GetOrders))
+		r.Get("/api/user/balance", http.HandlerFunc(srv.GetBalance))
+		r.Post("/api/user/balance/withdraw", http.HandlerFunc(srv.Withdraw))
+		r.Get("/api/user/withdrawals", http.HandlerFunc(srv.GetWithdrawals))
+	})
 
 	// close all connection after quit
 	defer srv.quit(ctx)

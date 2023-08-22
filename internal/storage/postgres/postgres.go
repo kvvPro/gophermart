@@ -3,7 +3,9 @@ package postgres
 import (
 	"context"
 	"errors"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/kvvPro/gophermart/internal/model"
@@ -95,6 +97,71 @@ func getUserQuery() string {
 	`
 }
 
+func (s *PostgresStorage) UploadOrder(ctx context.Context, orderID string, user *model.User) (model.EndPointStatus, error) {
+
+	var orderInfo model.Order
+	var status model.EndPointStatus
+
+	query := getOrderInfoQuery()
+	result := s.pool.QueryRow(ctx, query, orderID)
+	switch err := result.Scan(orderInfo.ID,
+		orderInfo.Owner,
+		orderInfo.UploadDate,
+		orderInfo.Status,
+		orderInfo.Bonus); err {
+	case pgx.ErrNoRows:
+		// заказа нет - создаем новый
+		insert := getAddOrderQuery()
+		insertRes, err := s.pool.Exec(ctx, insert, orderID,
+			user.Login, time.Now(), model.OrderStatusNew, 0.0)
+		if err != nil {
+			status = model.OtherError
+			return status, err
+		}
+		if insertRes.RowsAffected() == 0 {
+			status = model.OtherError
+			return status, errors.New("order not uploaded")
+		}
+		status = model.OrderAcceptedToProcessing
+		return status, nil
+	case nil:
+		// заказ есть - проверим, кем был загружен
+		// автор заказа тот же
+		if orderInfo.Owner == user.Login {
+			status = model.OrderAlreadyUploaded
+		}
+		if orderInfo.Owner != user.Login {
+			status = model.OrderAlreadyUploadedByAnotherUser
+		}
+		return status, nil
+	default:
+		return model.OtherError, err
+	}
+}
+
+func getOrderInfoQuery() string {
+	return `
+	SELECT orders.id,
+			orders.owner, 
+			orders.upload_date, 
+			orders.status, 
+			orders.bonus
+	FROM public.orders AS orders 
+		LEFT JOIN public.users AS users 
+	ON orders.owner = users.login
+	WHERE
+	orders.id = $1
+	`
+}
+
+func getAddOrderQuery() string {
+	return `
+	INSERT INTO public.orders(
+		id, owner, upload_date, status, bonus)
+		VALUES ($1, $2, $3, $4, $5);
+	`
+}
+
 func getInitQuery() string {
 	return `
 	-- Table: public.users
@@ -111,6 +178,30 @@ func getInitQuery() string {
 	TABLESPACE pg_default;
 
 	ALTER TABLE IF EXISTS public.users
+		OWNER to postgres;
+
+	-- Table: public.orders
+
+	-- DROP TABLE IF EXISTS public.orders;
+
+	CREATE TABLE IF NOT EXISTS public.orders
+	(
+		id character varying NOT NULL,
+		owner character varying NOT NULL,
+		upload_date date NOT NULL,
+		status character varying NOT NULL,
+		bonus double precision NOT NULL,
+		CONSTRAINT orders_pkey PRIMARY KEY (id),
+		CONSTRAINT fk_users FOREIGN KEY (owner)
+			REFERENCES public.users (login) MATCH SIMPLE
+			ON UPDATE NO ACTION
+			ON DELETE NO ACTION
+			NOT VALID
+	)
+
+	TABLESPACE pg_default;
+
+	ALTER TABLE IF EXISTS public.orders
 		OWNER to postgres;
 	`
 }

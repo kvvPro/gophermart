@@ -10,8 +10,9 @@ type User struct {
 type Order struct {
 	ID         string    `json:"number"`
 	Status     string    `json:"status"`
-	Accrual    int64     `json:"accrual"`
+	Bonus      int64     `json:"accrual"`
 	UploadDate time.Time `json:"uploaded_at"`
+	Owner      string    // user login, who uploaded this order
 }
 
 const (
@@ -43,4 +44,15 @@ const (
 	BonusStatusInvalid    = "INVALID"    // заказ не принят к расчёту, и вознаграждение не будет начислено
 	BonusStatusProcessing = "PROCESSING" // расчёт начисления в процессе
 	BonusStatusProcessed  = "PROCESSED"  // расчёт начисления окончен
+)
+
+type EndPointStatus int
+
+const (
+	OrderAlreadyUploaded EndPointStatus = iota
+	OrderAcceptedToProcessing
+	OrderAlreadyUploadedByAnotherUser
+	InvalidOrderID
+	ConnectionError
+	OtherError
 )
