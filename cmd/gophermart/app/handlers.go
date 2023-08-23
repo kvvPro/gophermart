@@ -283,7 +283,7 @@ func (srv *Server) PutOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if status == model.OrderAlreadyUploadedByAnotherUser {
-		http.Error(w, err.Error(), http.StatusConflict)
+		http.Error(w, "номер заказа уже был загружен другим пользователем", http.StatusConflict)
 		return
 	}
 	if status == model.OrderAlreadyUploaded {
