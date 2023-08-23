@@ -353,14 +353,14 @@ func (srv *Server) GetOrdersForUpdate(ctx context.Context) ([]*model.Order, erro
 func (srv *Server) RequestAccrual(ctx context.Context, orders []*model.Order) ([]*model.Order, error) {
 
 	client := &http.Client{}
-	url := "http://" + srv.AccrualSystemAddress + "/api/orders/{number}"
+	url := srv.AccrualSystemAddress + "/api/orders/{number}"
 
 	ordersForUpdate := []*model.Order{}
 
 	for _, el := range orders {
-		localUrl := strings.Replace(url, "{number}", el.ID, 1)
+		localURL := strings.Replace(url, "{number}", el.ID, 1)
 		bodyBuffer := new(bytes.Buffer)
-		request, err := http.NewRequest(http.MethodPost, localUrl, bodyBuffer)
+		request, err := http.NewRequest(http.MethodPost, localURL, bodyBuffer)
 		if err != nil {
 			Sugar.Infoln("Error request: ", err.Error())
 			continue
