@@ -360,7 +360,7 @@ func (srv *Server) RequestAccrual(ctx context.Context, orders []*model.Order) ([
 	for _, el := range orders {
 		localURL := strings.Replace(url, "{number}", el.ID, 1)
 		bodyBuffer := new(bytes.Buffer)
-		request, err := http.NewRequest(http.MethodPost, localURL, bodyBuffer)
+		request, err := http.NewRequest(http.MethodGet, localURL, bodyBuffer)
 		if err != nil {
 			Sugar.Infoln("Error request: ", err.Error())
 			continue
