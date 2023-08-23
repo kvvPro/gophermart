@@ -518,10 +518,10 @@ func getInitQuery() string {
 		sum double precision NOT NULL,
 		processed_date timestamp with time zone NOT NULL,
 		user_id character varying NOT NULL,
-		CONSTRAINT fk_orders FOREIGN KEY (order_id)
-			REFERENCES public.orders (id) MATCH SIMPLE
-			ON UPDATE NO ACTION
-			ON DELETE CASCADE,
+		-- CONSTRAINT fk_orders FOREIGN KEY (order_id)
+		--	REFERENCES public.orders (id) MATCH SIMPLE
+		--	ON UPDATE NO ACTION
+		--	ON DELETE CASCADE,
 		CONSTRAINT fk_users FOREIGN KEY (user_id)
 			REFERENCES public.users (login) MATCH SIMPLE
 			ON UPDATE NO ACTION
