@@ -383,19 +383,18 @@ func (srv *Server) RequestAccrual(ctx context.Context, orders []*model.Order) ([
 
 		var newInfo model.Order
 		Sugar.Infoln("-----------NEW REQUEST---------------")
+		Sugar.Infoln(
+			"uri", request.RequestURI,
+			"method", request.Method,
+			"status", response.Status, // получаем код статуса ответа
+		)
+		Sugar.Infoln("response-from-accrual: ", string(dataResponse))
 
 		reader := io.NopCloser(bytes.NewReader(dataResponse))
 		if err := json.NewDecoder(reader).Decode(&newInfo); err != nil {
 			Sugar.Infoln("Error to parse response body")
 			continue
 		}
-
-		Sugar.Infoln("response-from-accrual: ", string(dataResponse))
-		Sugar.Infoln(
-			"uri", request.RequestURI,
-			"method", request.Method,
-			"status", response.Status, // получаем код статуса ответа
-		)
 
 		response.Body.Close()
 
