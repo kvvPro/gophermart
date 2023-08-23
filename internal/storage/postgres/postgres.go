@@ -225,7 +225,10 @@ func (s *PostgresStorage) GetBalance(ctx context.Context, user *model.User) (*mo
 			Withdrawn: 0.0,
 		}, nil
 	case nil:
-		return &balance, nil
+		return &model.Balance{
+			Current:   balance.Current - balance.Withdrawn,
+			Withdrawn: balance.Withdrawn,
+		}, nil
 	default:
 		return nil, err
 	}
