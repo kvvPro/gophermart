@@ -16,4 +16,6 @@ type Storage interface {
 	GetBalance(ctx context.Context, user *model.User) (*model.Balance, error)
 	RequestWithdrawal(ctx context.Context, withdrawalInfo *model.Withdrawal) (model.EndPointStatus, error)
 	GetAllWithdrawals(ctx context.Context, user *model.User) ([]*model.Withdrawal, error)
+	GetOrdersForUpdate(ctx context.Context) ([]*model.Order, error)
+	UpdateBatchOrders(ctx context.Context, orders []*model.Order) error
 }

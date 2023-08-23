@@ -1,9 +1,13 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgerrcode"
@@ -19,10 +23,11 @@ import (
 )
 
 type Server struct {
-	Address              string
-	DBConnection         string
-	AccrualSystemAddress string
-	storage              storage.Storage
+	Address                string
+	DBConnection           string
+	AccrualSystemAddress   string
+	storage                storage.Storage
+	ReadingAccrualInterval int
 }
 
 func NewServer(ctx context.Context, config *config.ServerFlags) (*Server, error) {
@@ -287,6 +292,161 @@ func (srv *Server) AllWithdrawals(ctx context.Context, user *model.User) ([]*mod
 	}
 
 	return withdrawals, model.WithdrawalsDataExists, nil
+}
+
+func (srv *Server) AsyncUpdate(ctx context.Context) {
+
+	for {
+		// wait interval
+		select {
+		case <-time.After(time.Duration(srv.ReadingAccrualInterval) * time.Second):
+		case <-ctx.Done():
+			return
+		}
+
+		// сначал получим все заказы для обновления
+		// это заказы в статусах PROCESSING и NEW
+		orders, err := srv.GetOrdersForUpdate(ctx)
+		if err != nil {
+			continue
+		}
+		// запрашиваем статусы у внещней системы
+		ordersForUpdate, _ := srv.RequestAccrual(ctx, orders)
+		// обновляем информацию в нашей системе
+		err = srv.UpdateOrders(ctx, ordersForUpdate)
+		if err != nil {
+			continue
+		}
+	}
+
+}
+
+func (srv *Server) GetOrdersForUpdate(ctx context.Context) ([]*model.Order, error) {
+	var err error
+	var orders []*model.Order
+
+	err = retry.Do(func() error {
+		orders, err = srv.storage.GetOrdersForUpdate(ctx)
+		return err
+	},
+		retry.RetryIf(func(errAttempt error) bool {
+			var pgErr *pgconn.PgError
+			if errors.As(errAttempt, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+				return true
+			}
+			return false
+		}),
+		retry.Attempts(3),
+		retry.InitDelay(1000*time.Millisecond),
+		retry.Step(2000*time.Millisecond),
+		retry.Context(ctx),
+	)
+
+	if err != nil {
+		Sugar.Errorln(err)
+		return nil, err
+	}
+
+	return orders, nil
+}
+
+func (srv *Server) RequestAccrual(ctx context.Context, orders []*model.Order) ([]*model.Order, error) {
+
+	client := &http.Client{}
+	url := "http://" + srv.AccrualSystemAddress + "/api/orders/{number}"
+
+	ordersForUpdate := []*model.Order{}
+
+	for _, el := range orders {
+		localUrl := strings.Replace(url, "{number}", el.ID, 1)
+		bodyBuffer := new(bytes.Buffer)
+		request, err := http.NewRequest(http.MethodPost, localUrl, bodyBuffer)
+		if err != nil {
+			Sugar.Infoln("Error request: ", err.Error())
+			continue
+		}
+		Sugar.Infoln("-----------NEW REQUEST---------------")
+		Sugar.Infoln("request-to-accrual: ", bodyBuffer.String())
+
+		request.Header.Set("Connection", "Keep-Alive")
+		response, err := client.Do(request)
+		if err != nil {
+			Sugar.Infoln("Error response: ", err.Error())
+			continue
+		}
+		Sugar.Infoln("Request done")
+
+		dataResponse, err := io.ReadAll(response.Body)
+		if err != nil {
+			Sugar.Infoln("Error reading response body: ", err.Error())
+			continue
+		}
+
+		var newInfo model.Order
+
+		reader := io.NopCloser(bytes.NewReader(dataResponse))
+		if err := json.NewDecoder(reader).Decode(&newInfo); err != nil {
+			continue
+		}
+
+		Sugar.Infoln("Response body was read")
+
+		Sugar.Infoln("response-from-accrual: ", string(dataResponse))
+		Sugar.Infoln(
+			"uri", request.RequestURI,
+			"method", request.Method,
+			"status", response.Status, // получаем код статуса ответа
+		)
+
+		response.Body.Close()
+
+		// анализируем ответы
+		if response.StatusCode == http.StatusOK {
+			// обновляем данные
+			newInfo.Owner = el.Owner
+			newInfo.UploadDate = el.UploadDate
+			ordersForUpdate = append(ordersForUpdate, &newInfo)
+		} else if response.StatusCode == http.StatusNoContent {
+			// данных по заказу нет - можно не обновлять
+			continue
+		} else if response.StatusCode == http.StatusTooManyRequests {
+			// надо подождать и попробовать заново через Retry-After
+			continue
+		} else {
+			// любые другие ошибки - просто пропускаем попытку
+			continue
+		}
+	}
+
+	return ordersForUpdate, nil
+}
+
+func (srv *Server) UpdateOrders(ctx context.Context, orders []*model.Order) error {
+	var err error
+
+	err = retry.Do(func() error {
+		err = srv.storage.UpdateBatchOrders(ctx, orders)
+		return err
+	},
+		retry.RetryIf(func(errAttempt error) bool {
+			var pgErr *pgconn.PgError
+			if errors.As(errAttempt, &pgErr) && pgerrcode.IsConnectionException(pgErr.Code) {
+				return true
+			}
+			return false
+		}),
+		retry.Attempts(3),
+		retry.InitDelay(1000*time.Millisecond),
+		retry.Step(2000*time.Millisecond),
+		retry.Context(ctx),
+	)
+
+	if err != nil {
+		Sugar.Errorln(err)
+		return err
+	}
+
+	return nil
 }
 
 func (srv *Server) Run(ctx context.Context, srvFlags *config.ServerFlags) {

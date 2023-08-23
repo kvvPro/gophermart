@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/kvvPro/gophermart/internal/model"
+	"github.com/lib/pq"
 )
 
 type PostgresStorage struct {
@@ -365,6 +366,103 @@ func getAllWithdrawalsQuery() string {
 		orders.owner = $1
 	ORDER BY
 		withdrawals.processed_date ASC
+	`
+}
+
+func (s *PostgresStorage) GetOrdersForUpdate(ctx context.Context) ([]*model.Order, error) {
+
+	orders := []*model.Order{}
+	statusesForUpdate := StatusesForUpdate()
+
+	query := getOrdersForUpdateQuery()
+	result, err := s.pool.Query(ctx, query, pq.Array(statusesForUpdate))
+	if err != nil {
+		return nil, err
+	}
+
+	defer result.Close()
+
+	for result.Next() {
+		var orderInfo model.Order
+		err = result.Scan(&orderInfo.ID,
+			&orderInfo.Owner,
+			&orderInfo.UploadDate,
+			&orderInfo.Status,
+			&orderInfo.Bonus)
+		if err != nil {
+			return nil, err
+		}
+		orders = append(orders, &orderInfo)
+	}
+
+	err = result.Err()
+	if err != nil {
+		return nil, err
+	}
+
+	return orders, nil
+}
+
+func StatusesForUpdate() []string {
+	return []string{
+		model.OrderStatusNew,
+		model.OrderStatusProcessing,
+		model.BonusStatusNew, // под вопросом
+	}
+}
+
+func getOrdersForUpdateQuery() string {
+	return `
+	SELECT orders.id, 
+			orders.owner, 
+			orders.upload_date, 
+			orders.status, 
+			orders.bonus
+		FROM public.orders as orders
+	WHERE
+		orders.status=ANY($1)
+	ORDER BY
+		orders.upload_date ASC
+	`
+}
+
+func (s *PostgresStorage) UpdateBatchOrders(ctx context.Context, orders []*model.Order) error {
+
+	transaction, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback(ctx)
+
+	for _, el := range orders {
+		err = s.updateOrder(ctx, el)
+		if err != nil {
+			return err
+		}
+	}
+
+	transaction.Commit(ctx)
+
+	return nil
+}
+
+func (s *PostgresStorage) updateOrder(ctx context.Context, order *model.Order) error {
+	update := getUpdateOrderQuery()
+	insertRes, err := s.pool.Exec(ctx, update, order.Status, order.Bonus, order.ID)
+	if err != nil {
+		return err
+	}
+	if insertRes.RowsAffected() == 0 {
+		return errors.New("order not updated")
+	}
+	return nil
+}
+
+func getUpdateOrderQuery() string {
+	return `
+	UPDATE public.orders
+		SET status=$1, bonus=$2
+		WHERE id=$3;
 	`
 }
 
