@@ -311,14 +311,17 @@ func (srv *Server) AsyncUpdate(ctx context.Context) {
 			continue
 		}
 		// запрашиваем статусы у внещней системы
-		ordersForUpdate, _ := srv.RequestAccrual(ctx, orders)
-		// обновляем информацию в нашей системе
-		err = srv.UpdateOrders(ctx, ordersForUpdate)
-		if err != nil {
-			continue
+		if len(orders) > 0 {
+			ordersForUpdate, _ := srv.RequestAccrual(ctx, orders)
+			// обновляем информацию в нашей системе
+			if len(ordersForUpdate) > 0 {
+				err = srv.UpdateOrders(ctx, ordersForUpdate)
+				if err != nil {
+					continue
+				}
+			}
 		}
 	}
-
 }
 
 func (srv *Server) GetOrdersForUpdate(ctx context.Context) ([]*model.Order, error) {
@@ -365,16 +368,12 @@ func (srv *Server) RequestAccrual(ctx context.Context, orders []*model.Order) ([
 			Sugar.Infoln("Error request: ", err.Error())
 			continue
 		}
-		Sugar.Infoln("-----------NEW REQUEST---------------")
-		Sugar.Infoln("request-to-accrual: ", bodyBuffer.String())
-
 		request.Header.Set("Connection", "Keep-Alive")
 		response, err := client.Do(request)
 		if err != nil {
 			Sugar.Infoln("Error response: ", err.Error())
 			continue
 		}
-		Sugar.Infoln("Request done")
 
 		dataResponse, err := io.ReadAll(response.Body)
 		if err != nil {
@@ -383,13 +382,13 @@ func (srv *Server) RequestAccrual(ctx context.Context, orders []*model.Order) ([
 		}
 
 		var newInfo model.Order
+		Sugar.Infoln("-----------NEW REQUEST---------------")
 
 		reader := io.NopCloser(bytes.NewReader(dataResponse))
 		if err := json.NewDecoder(reader).Decode(&newInfo); err != nil {
+			Sugar.Infoln("Error to parse response body")
 			continue
 		}
-
-		Sugar.Infoln("Response body was read")
 
 		Sugar.Infoln("response-from-accrual: ", string(dataResponse))
 		Sugar.Infoln(
@@ -403,6 +402,7 @@ func (srv *Server) RequestAccrual(ctx context.Context, orders []*model.Order) ([
 		// анализируем ответы
 		if response.StatusCode == http.StatusOK {
 			// обновляем данные
+			newInfo.ID = el.ID
 			newInfo.Owner = el.Owner
 			newInfo.UploadDate = el.UploadDate
 			ordersForUpdate = append(ordersForUpdate, &newInfo)
