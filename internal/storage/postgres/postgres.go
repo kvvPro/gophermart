@@ -360,10 +360,8 @@ func getAllWithdrawalsQuery() string {
 			withdrawals.sum, 
 			withdrawals.processed_date
 	FROM public.withdrawals as withdrawals
-		INNER JOIN public.orders as orders 
-		ON orders.id = withdrawals.order_id
 	WHERE 
-		orders.owner = $1
+		withdrawals.user_id = $1
 	ORDER BY
 		withdrawals.processed_date ASC
 	`
