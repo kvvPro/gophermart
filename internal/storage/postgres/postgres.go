@@ -311,7 +311,7 @@ func getWithdrawalInfoQuery() string {
 			withdrawals.user_id
 	FROM public.withdrawals as withdrawals
 	WHERE 
-		withdrawals.order = $1
+		withdrawals.order_id = $1
 	`
 }
 
