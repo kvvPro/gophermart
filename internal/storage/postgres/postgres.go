@@ -133,7 +133,7 @@ func (s *PostgresStorage) UploadOrder(ctx context.Context, orderID string, user 
 			return status, nil
 		} else {
 			status = model.OrderAlreadyUploadedByAnotherUser
-			return status, errors.New("номер заказа уже был загружен другим пользователем")
+			return status, nil // errors.New("номер заказа уже был загружен другим пользователем")
 		}
 	default:
 		return model.OtherError, err

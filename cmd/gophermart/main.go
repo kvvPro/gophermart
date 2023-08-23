@@ -38,7 +38,7 @@ func main() {
 		app.Sugar.Fatalw(err.Error(), "event", "create server")
 	}
 
-	go srv.AsyncUpdate(context.Background())
+	//go srv.AsyncUpdate(context.Background())
 
 	app.Sugar.Infoln("before starting server")
 

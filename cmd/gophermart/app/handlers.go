@@ -277,15 +277,15 @@ func (srv *Server) PutOrder(w http.ResponseWriter, r *http.Request) {
 
 	status, err := srv.UploadOrder(context.Background(), orderID, userInfo)
 	if err != nil {
-		if status == model.OrderAlreadyUploadedByAnotherUser {
-			http.Error(w, err.Error(), http.StatusConflict)
-			return
-		}
 		// other errros
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	if status == model.OrderAlreadyUploadedByAnotherUser {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
 	if status == model.OrderAlreadyUploaded {
 		w.WriteHeader(http.StatusOK)
 		body := "номер заказа уже был загружен этим пользователем"
