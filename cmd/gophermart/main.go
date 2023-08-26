@@ -25,6 +25,7 @@ func main() {
 
 	// делаем регистратор SugaredLogger
 	app.Sugar = *logger.Sugar()
+	config.Sugar = *logger.Sugar()
 
 	app.Sugar.Infoln("before init config")
 
