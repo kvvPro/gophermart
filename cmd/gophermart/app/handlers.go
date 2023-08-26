@@ -130,7 +130,7 @@ func (srv *Server) Auth(w http.ResponseWriter, r *http.Request) {
 
 	// проверим пароль пользователя
 	if userInfo == nil || userInfo.Password != user.Password {
-		http.Error(w, "неверная пара логин/пароль: "+err.Error(), http.StatusUnauthorized)
+		http.Error(w, "неверная пара логин/пароль: ", http.StatusUnauthorized)
 		return
 	}
 
