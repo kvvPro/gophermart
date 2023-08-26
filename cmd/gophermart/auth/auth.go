@@ -10,11 +10,10 @@ import (
 )
 
 // Claims — структура утверждений, которая включает стандартные утверждения
-// и одно пользовательское — UserID
+// и одно пользовательское — UserLogin
 type Claims struct {
 	jwt.RegisteredClaims
 	UserLogin string
-	UserPass  string
 }
 
 const tokenExp = time.Hour * 3
@@ -30,7 +29,6 @@ func BuildJWTString(login string, pass string) (string, error) {
 		},
 		// собственное утверждение
 		UserLogin: login,
-		UserPass:  pass,
 	})
 
 	// создаём строку токена
@@ -62,7 +60,6 @@ func GetUserInfo(tokenString string) (*model.User, error) {
 	}
 
 	return &model.User{
-			Login:    claims.UserLogin,
-			Password: claims.UserPass},
+			Login: claims.UserLogin},
 		nil
 }

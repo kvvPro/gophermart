@@ -28,21 +28,26 @@ func main() {
 
 	app.Sugar.Infoln("before init config")
 
-	srvFlags := config.Initialize()
+	srvFlags, err := config.Initialize()
+	if err != nil {
+		app.Sugar.Fatalw(err.Error(), "event", "get config")
+	}
 
 	app.Sugar.Infoln("after init config")
 
-	srv, err := app.NewServer(context.Background(), &srvFlags)
+	ctx := context.Background()
+
+	srv, err := app.NewServer(ctx, srvFlags)
 
 	if err != nil {
 		app.Sugar.Fatalw(err.Error(), "event", "create server")
 	}
 
-	go srv.AsyncUpdate(context.Background())
+	go srv.AsyncUpdate(ctx)
 
 	app.Sugar.Infoln("before starting server")
 
-	go srv.Run(context.Background(), &srvFlags)
+	go srv.Run(ctx, srvFlags)
 
 	sigQuit := <-shutdown
 	app.Sugar.Infoln("Server shutdown by signal: ", sigQuit)

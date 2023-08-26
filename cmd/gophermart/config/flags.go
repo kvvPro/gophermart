@@ -1,10 +1,9 @@
 package config
 
 import (
-	"fmt"
-
 	"github.com/caarlos0/env/v9"
 	"github.com/spf13/pflag"
+	"go.uber.org/zap"
 )
 
 type ServerFlags struct {
@@ -14,7 +13,9 @@ type ServerFlags struct {
 	ReadingAccrualInterval int    `env:"READING_ACCRUAL_INTERVAL"`
 }
 
-func Initialize() ServerFlags {
+var Sugar zap.SugaredLogger
+
+func Initialize() (*ServerFlags, error) {
 	srvFlags := new(ServerFlags)
 	// try to get vars from Flags
 	pflag.StringVarP(&srvFlags.Address, "addr", "a", "localhost:8080", "Net address host:port")
@@ -24,21 +25,21 @@ func Initialize() ServerFlags {
 
 	pflag.Parse()
 
-	fmt.Println("\nFLAGS-----------")
-	fmt.Printf("RUN_ADDRESS=%v", srvFlags.Address)
-	fmt.Printf("DATABASE_URI=%v", srvFlags.DBConnection)
-	fmt.Printf("ACCRUAL_SYSTEM_ADDRESS=%v", srvFlags.AccrualSystemAddress)
-	fmt.Printf("READING_ACCRUAL_INTERVAL=%v", srvFlags.ReadingAccrualInterval)
+	Sugar.Infoln("\nFLAGS-----------")
+	Sugar.Infof("RUN_ADDRESS=%v", srvFlags.Address)
+	Sugar.Infof("DATABASE_URI=%v", srvFlags.DBConnection)
+	Sugar.Infof("ACCRUAL_SYSTEM_ADDRESS=%v", srvFlags.AccrualSystemAddress)
+	Sugar.Infof("READING_ACCRUAL_INTERVAL=%v", srvFlags.ReadingAccrualInterval)
 
 	// try to get vars from env
 	if err := env.Parse(srvFlags); err != nil {
-		panic(err)
+		return nil, err
 	}
-	fmt.Println("ENV-----------")
-	fmt.Printf("RUN_ADDRESS=%v", srvFlags.Address)
-	fmt.Printf("DATABASE_URI=%v", srvFlags.DBConnection)
-	fmt.Printf("ACCRUAL_SYSTEM_ADDRESS=%v", srvFlags.AccrualSystemAddress)
-	fmt.Printf("READING_ACCRUAL_INTERVAL=%v", srvFlags.ReadingAccrualInterval)
+	Sugar.Infoln("ENV-----------")
+	Sugar.Infof("RUN_ADDRESS=%v", srvFlags.Address)
+	Sugar.Infof("DATABASE_URI=%v", srvFlags.DBConnection)
+	Sugar.Infof("ACCRUAL_SYSTEM_ADDRESS=%v", srvFlags.AccrualSystemAddress)
+	Sugar.Infof("READING_ACCRUAL_INTERVAL=%v", srvFlags.ReadingAccrualInterval)
 
-	return *srvFlags
+	return srvFlags, nil
 }

@@ -52,12 +52,6 @@ func (s *PostgresStorage) Quit(ctx context.Context) {
 }
 
 func (s *PostgresStorage) AddUser(ctx context.Context, user *model.User) error {
-	transaction, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer transaction.Rollback(ctx)
-
 	addUserQuery := addUserQuery()
 	insertRes, err := s.pool.Exec(ctx, addUserQuery, user.Login, user.Password)
 	if err != nil {
@@ -67,7 +61,6 @@ func (s *PostgresStorage) AddUser(ctx context.Context, user *model.User) error {
 		return errors.New("can't add user")
 	}
 
-	transaction.Commit(ctx)
 	return nil
 }
 
@@ -239,6 +232,12 @@ func (s *PostgresStorage) RequestWithdrawal(ctx context.Context, withdrawalInfo 
 	var allBonuses float64
 	var allWithdrawals float64
 
+	transaction, err := s.pool.Begin(ctx)
+	if err != nil {
+		return model.OtherError, err
+	}
+	defer transaction.Rollback(ctx)
+
 	query := getBonusBalanceQuery()
 	result := s.pool.QueryRow(ctx, query, withdrawalInfo.User)
 	switch err := result.Scan(&allBonuses, &allWithdrawals); err {
@@ -269,6 +268,7 @@ func (s *PostgresStorage) RequestWithdrawal(ctx context.Context, withdrawalInfo 
 				if insertRes.RowsAffected() == 0 {
 					return model.OtherError, errors.New("списание не прошло")
 				}
+				transaction.Commit(ctx)
 				return model.WithdrawalAccepted, nil
 			case nil:
 				// списания есть - запрещаем повторное списание
