@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/kvvPro/gophermart/cmd/gophermart/config"
@@ -17,6 +18,7 @@ type Server struct {
 	AccrualSystemAddress   string
 	storage                storage.Storage
 	ReadingAccrualInterval int
+	UpdateThreadCount      int
 }
 
 func NewServer(ctx context.Context, configs *config.ServerFlags) (*Server, error) {
@@ -26,14 +28,17 @@ func NewServer(ctx context.Context, configs *config.ServerFlags) (*Server, error
 	}
 
 	return &Server{
-		storage:              st,
-		Address:              configs.Address,
-		DBConnection:         configs.DBConnection,
-		AccrualSystemAddress: configs.AccrualSystemAddress,
+		storage:                st,
+		Address:                configs.Address,
+		DBConnection:           configs.DBConnection,
+		AccrualSystemAddress:   configs.AccrualSystemAddress,
+		ReadingAccrualInterval: configs.ReadingAccrualInterval,
+		UpdateThreadCount:      configs.UpdateThreadCount,
 	}, nil
 }
 
 func (srv *Server) quit(ctx context.Context) {
+	Sugar.Infoln("закрытие пула соединений")
 	srv.storage.Quit(ctx)
 }
 
@@ -41,13 +46,16 @@ func (srv *Server) Ping(ctx context.Context) error {
 	return srv.storage.Ping(ctx)
 }
 
-func (srv *Server) AsyncUpdate(ctx context.Context) {
+func (srv *Server) AsyncUpdate(ctx context.Context, wg *sync.WaitGroup) {
+
+	defer wg.Done()
 
 	for {
 		// wait interval
 		select {
 		case <-time.After(time.Duration(srv.ReadingAccrualInterval) * time.Second):
 		case <-ctx.Done():
+			Sugar.Infoln("остановка асинхронного обновления")
 			return
 		}
 

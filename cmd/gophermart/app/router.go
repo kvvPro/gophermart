@@ -3,12 +3,13 @@ package app
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kvvPro/gophermart/cmd/gophermart/config"
 )
 
-func (srv *Server) Run(ctx context.Context, srvFlags *config.ServerFlags) {
+func (srv *Server) StartServer(ctx context.Context, wg *sync.WaitGroup, srvFlags *config.ServerFlags) *http.Server {
 	r := chi.NewMux()
 	r.Use(GzipMiddleware,
 		WithLogging)
@@ -26,17 +27,25 @@ func (srv *Server) Run(ctx context.Context, srvFlags *config.ServerFlags) {
 		r.Get("/api/user/withdrawals", http.HandlerFunc(srv.GetWithdrawals))
 	})
 
-	// close all connection after quit
-	defer srv.quit(ctx)
-
 	// записываем в лог, что сервер запускается
 	Sugar.Infow(
 		"Starting server",
 		"srvFlags", srvFlags,
 	)
 
-	if err := http.ListenAndServe(srv.Address, r); err != nil {
-		// записываем в лог ошибку, если сервер не запустился
-		Sugar.Fatalw(err.Error(), "event", "start server")
+	httpSrv := &http.Server{
+		Addr:    srv.Address,
+		Handler: r,
 	}
+	go func() {
+		defer wg.Done()
+		defer srv.quit(ctx)
+
+		if err := httpSrv.ListenAndServe(); err != http.ErrServerClosed {
+			// записываем в лог ошибку, если сервер не запустился
+			Sugar.Fatalw(err.Error(), "event", "start server")
+		}
+	}()
+
+	return httpSrv
 }

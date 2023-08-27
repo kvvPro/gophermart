@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/kvvPro/gophermart/cmd/gophermart/app"
 	"github.com/kvvPro/gophermart/cmd/gophermart/config"
@@ -44,12 +46,33 @@ func main() {
 		app.Sugar.Fatalw(err.Error(), "event", "create server")
 	}
 
-	go srv.AsyncUpdate(ctx)
+	wg := &sync.WaitGroup{}
+
+	asyncCtx, cancelUpdate := context.WithCancel(ctx)
+	// размножим обновления из внешнего сервиса
+	for i := 0; i < srv.UpdateThreadCount; i++ {
+		wg.Add(1)
+		go srv.AsyncUpdate(asyncCtx, wg)
+	}
 
 	app.Sugar.Infoln("before starting server")
 
-	go srv.Run(ctx, srvFlags)
+	wg.Add(1)
+	httpSrv := srv.StartServer(ctx, wg, srvFlags)
 
 	sigQuit := <-shutdown
+
+	timeout, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	app.Sugar.Infoln("Попытка мягко завершить сервер")
+	if err := httpSrv.Shutdown(timeout); err != nil {
+		app.Sugar.Errorf("Ошибка при попытке мягко завершить http-сервер: %v", err)
+		// handle err
+		if err = httpSrv.Close(); err != nil {
+			app.Sugar.Errorf("Ошибка при попытке завершить http-сервер: %v", err)
+		}
+	}
+	cancelUpdate()
+	wg.Wait()
 	app.Sugar.Infoln("Server shutdown by signal: ", sigQuit)
 }
