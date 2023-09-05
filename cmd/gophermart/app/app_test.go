@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/zap"
 
 	"github.com/kvvPro/gophermart/cmd/gophermart/config"
@@ -20,7 +22,7 @@ import (
 
 func TestNewServer(t *testing.T) {
 	// start comtainer
-	//commonNetwork := "gophermart_devcontainer_default"
+	commonNetwork := "gophermart_devcontainer_default"
 	ctx := context.Background()
 	logger, err := zap.NewDevelopment()
 	if err != nil {
@@ -29,58 +31,57 @@ func TestNewServer(t *testing.T) {
 	}
 	defer logger.Sync()
 	Sugar = *logger.Sugar()
-	// dbname := "postgres"
-
-	// dbUser := "postgres"
-	// dbPassword := "postgres"
+	dbname := "postgres"
+	dbUser := "postgres"
+	dbPassword := "postgres"
 	dbhost := "localhost"
 	port := 5432
 	dbConn := fmt.Sprintf("user=postgres password=postgres host=%v port=%v dbname=postgres sslmode=disable",
 		dbhost, port)
-	// req := testcontainers.ContainerRequest{
-	// 	Name:         "db_postgres",
-	// 	Image:        "postgres:latest",
-	// 	ExposedPorts: []string{"5432/tcp"},
-	// 	WaitingFor:   wait.ForLog("database system is ready to accept connections"),
-	// 	SkipReaper:   true,
-	// 	Env: map[string]string{
-	// 		"POSTGRES_USER":     dbUser,
-	// 		"POSTGRES_PASSWORD": dbPassword,
-	// 		"POSTGRES_DB":       dbname,
-	// 		"POSTGRES_HOSTNAME": dbhost,
-	// 	},
-	// 	Networks: []string{
-	// 		commonNetwork,
-	// 	},
-	// }
-	// postgresC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-	// 	ContainerRequest: req,
-	// 	Started:          true,
-	// })
+	req := testcontainers.ContainerRequest{
+		Name:         "db_postgres",
+		Image:        "postgres:latest",
+		ExposedPorts: []string{"5432/tcp"},
+		WaitingFor:   wait.ForLog("database system is ready to accept connections"),
+		SkipReaper:   true,
+		Env: map[string]string{
+			"POSTGRES_USER":     dbUser,
+			"POSTGRES_PASSWORD": dbPassword,
+			"POSTGRES_DB":       dbname,
+			"POSTGRES_HOSTNAME": dbhost,
+		},
+		Networks: []string{
+			commonNetwork,
+		},
+	}
+	postgresC, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
 
-	// if err != nil {
-	// 	t.Error(err)
-	// 	return
-	// }
-	// defer func() {
-	// 	if err := postgresC.Terminate(ctx); err != nil {
-	// 		t.Fatalf("failed to terminate container: %s", err.Error())
-	// 	}
-	// }()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer func() {
+		if err := postgresC.Terminate(ctx); err != nil {
+			t.Fatalf("failed to terminate container: %s", err.Error())
+		}
+	}()
 
-	// ip, err := postgresC.Host(ctx)
-	// if err != nil {
-	// 	t.Error(err)
-	// 	return
-	// }
+	ip, err := postgresC.Host(ctx)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 
-	// mappedPort, err := postgresC.MappedPort(ctx, "5432")
-	// if err != nil {
-	// 	t.Error(err)
-	// 	return
-	// }
+	mappedPort, err := postgresC.MappedPort(ctx, "5432")
+	if err != nil {
+		t.Error(err)
+		return
+	}
 
-	// t.Logf("container run on %v:%v", ip, mappedPort.Port())
+	t.Logf("container run on %v:%v", ip, mappedPort.Port())
 	st, err := postgres.NewPSQLStorage(ctx, dbConn)
 	if err != nil {
 		t.Errorf(errors.New("cannot create storage for server" + err.Error()).Error())
@@ -92,12 +93,10 @@ func TestNewServer(t *testing.T) {
 		configs *config.ServerFlags
 	}
 	test := struct {
-		name    string
 		args    args
 		want    *Server
 		wantErr bool
 	}{
-		name: "main",
 		args: args{
 			context.Background(),
 			&config.ServerFlags{
@@ -302,11 +301,11 @@ func TestNewServer(t *testing.T) {
 		})
 	}
 
-	user1_token, err := getUserToken(client, newSrv, usersAuth[0].login, usersAuth[0].password)
+	user1Token, err := getUserToken(client, newSrv, usersAuth[0].login, usersAuth[0].password)
 	if err != nil {
 		t.Errorf("error from response %v %v: %v", "POST", "/api/user/login", err.Error())
 	}
-	user2_token, err := getUserToken(client, newSrv, usersAuth[1].login, usersAuth[1].password)
+	user2Token, err := getUserToken(client, newSrv, usersAuth[1].login, usersAuth[1].password)
 	if err != nil {
 		t.Errorf("error from response %v %v: %v", "POST", "/api/user/login", err.Error())
 	}
@@ -321,7 +320,7 @@ func TestNewServer(t *testing.T) {
 	}{
 		{
 			name:  "order_user1_new",
-			token: user1_token,
+			token: user1Token,
 			order: &model.Order{
 				ID: "2000000000008",
 			},
@@ -330,7 +329,7 @@ func TestNewServer(t *testing.T) {
 		},
 		{
 			name:  "order_user1_uploaded_twice",
-			token: user1_token,
+			token: user1Token,
 			order: &model.Order{
 				ID: "2000000000008",
 			},
@@ -339,7 +338,7 @@ func TestNewServer(t *testing.T) {
 		},
 		{
 			name:  "order_user2_new",
-			token: user2_token,
+			token: user2Token,
 			order: &model.Order{
 				ID: "1000000000009",
 			},
@@ -348,7 +347,7 @@ func TestNewServer(t *testing.T) {
 		},
 		{
 			name:  "order_user2_already_uploaded",
-			token: user2_token,
+			token: user2Token,
 			order: &model.Order{
 				ID: "2000000000008",
 			},
@@ -357,7 +356,7 @@ func TestNewServer(t *testing.T) {
 		},
 		{
 			name:  "order_user1_invalid_order",
-			token: user1_token,
+			token: user1Token,
 			order: &model.Order{
 				ID: "11110000",
 			},
@@ -400,13 +399,13 @@ func TestNewServer(t *testing.T) {
 	}{
 		{
 			name:       "orders_user1",
-			token:      user1_token,
+			token:      user1Token,
 			wantErr:    false,
 			wantStatus: http.StatusNoContent,
 		},
 		{
 			name:       "orders_user2",
-			token:      user2_token,
+			token:      user2Token,
 			wantErr:    false,
 			wantStatus: http.StatusOK,
 		},
@@ -445,7 +444,7 @@ func TestNewServer(t *testing.T) {
 	}{
 		{
 			name:          "balance_user1",
-			token:         user1_token,
+			token:         user1Token,
 			wantBalance:   0.0,
 			wantWithdrawn: 0.0,
 			wantErr:       false,
@@ -453,7 +452,7 @@ func TestNewServer(t *testing.T) {
 		},
 		{
 			name:          "balance_user2",
-			token:         user2_token,
+			token:         user2Token,
 			wantBalance:   100.0,
 			wantWithdrawn: 0.0,
 			wantErr:       false,
@@ -501,7 +500,7 @@ func TestNewServer(t *testing.T) {
 	}{
 		{
 			name:  "withdraw_user2_ok",
-			token: user2_token,
+			token: user2Token,
 			withdraw: &model.Withdrawal{
 				OrderID: "1000000000009",
 				Sum:     20,
@@ -511,7 +510,7 @@ func TestNewServer(t *testing.T) {
 		},
 		{
 			name:  "withdraw_user2_no_bonuses",
-			token: user2_token,
+			token: user2Token,
 			withdraw: &model.Withdrawal{
 				OrderID: "1000000000009",
 				Sum:     100000,
@@ -521,7 +520,7 @@ func TestNewServer(t *testing.T) {
 		},
 		{
 			name:  "withdraw_user1_invalid_order",
-			token: user1_token,
+			token: user1Token,
 			withdraw: &model.Withdrawal{
 				OrderID: "333333333",
 				Sum:     1,
@@ -571,7 +570,7 @@ func TestNewServer(t *testing.T) {
 	}{
 		{
 			name:  "withdrawal_user2_ok",
-			token: user2_token,
+			token: user2Token,
 			withdraw: &model.Withdrawal{
 				OrderID:       "1000000000009",
 				Sum:           20,
@@ -583,7 +582,7 @@ func TestNewServer(t *testing.T) {
 		},
 		{
 			name:       "withdrawal_user1_no_withdrawals",
-			token:      user1_token,
+			token:      user1Token,
 			wantErr:    true,
 			wantStatus: http.StatusNoContent,
 		},
