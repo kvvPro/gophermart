@@ -70,20 +70,23 @@ func (srv *Server) AsyncUpdate(ctx context.Context, wg *sync.WaitGroup) {
 		if len(orders) > 0 {
 			ordersForUpdate, _ := srv.RequestAccrual(ctx, orders)
 			// обновляем информацию в нашей системе
-			if len(ordersForUpdate) > 0 {
+			length := len(ordersForUpdate)
+			if length > 0 {
 				// распараллелим обновление заказов
-				batchSize := len(ordersForUpdate) / srv.UpdateThreadCount
+				batchSize := length / srv.UpdateThreadCount
 				for i := 0; i < srv.UpdateThreadCount; i++ {
+					start := i * batchSize
 					end := (i + 1) * batchSize
+					batchForUpdate := ordersForUpdate[start:end]
 					if i == srv.UpdateThreadCount-1 {
-						if len(ordersForUpdate)%srv.UpdateThreadCount != 0 {
-							end = len(ordersForUpdate) - 1
+						if length%srv.UpdateThreadCount != 0 {
+							batchForUpdate = ordersForUpdate[start:]
 						}
 					}
+
 					wg.Add(1)
-					start := i * batchSize
 					go func() {
-						_ = srv.UpdateOrders(ctx, wg, ordersForUpdate[start:end])
+						_ = srv.UpdateOrders(ctx, wg, batchForUpdate)
 					}()
 				}
 
