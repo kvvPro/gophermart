@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgerrcode"
@@ -91,9 +92,9 @@ func (srv *Server) OrderList(ctx context.Context, userInfo *model.User) ([]*mode
 	return orders, model.OrderListExists, nil
 }
 
-func (srv *Server) GetOrdersForUpdate(ctx context.Context) ([]*model.Order, error) {
+func (srv *Server) GetOrdersForUpdate(ctx context.Context) ([]model.Order, error) {
 	var err error
-	var orders []*model.Order
+	var orders []model.Order
 
 	err = retry.Do(func() error {
 		orders, err = srv.storage.GetOrdersForUpdate(ctx)
@@ -120,7 +121,9 @@ func (srv *Server) GetOrdersForUpdate(ctx context.Context) ([]*model.Order, erro
 	return orders, nil
 }
 
-func (srv *Server) UpdateOrders(ctx context.Context, orders []*model.Order) error {
+func (srv *Server) UpdateOrders(ctx context.Context, wg *sync.WaitGroup, orders []model.Order) error {
+	defer wg.Done()
+
 	var err error
 
 	err = retry.Do(func() error {

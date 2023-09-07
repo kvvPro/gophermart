@@ -20,7 +20,7 @@ const tokenExp = time.Hour * 3
 const secretKey = "supersecretkey"
 
 // BuildJWTString создаёт токен и возвращает его в виде строки.
-func BuildJWTString(login string, pass string) (string, error) {
+func BuildJWTString(login string) (string, error) {
 	// создаём новый токен с алгоритмом подписи HS256 и утверждениями — Claims
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{

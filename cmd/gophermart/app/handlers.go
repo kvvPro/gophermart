@@ -77,7 +77,7 @@ func (srv *Server) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// generate auth token
-	token, err := auth.BuildJWTString(user.Login, user.Password)
+	token, err := auth.BuildJWTString(user.Login)
 	if err != nil {
 		Sugar.Errorf("ошибка при генерации токена: %v", err.Error())
 		http.Error(w, "ошибка при генерации токена: "+err.Error(), http.StatusInternalServerError)
@@ -135,7 +135,7 @@ func (srv *Server) Auth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// get token
-	token, err := auth.BuildJWTString(userInfo.Login, userInfo.Password)
+	token, err := auth.BuildJWTString(userInfo.Login)
 	if err != nil {
 		Sugar.Errorf("ошибка при генерации токена: %v", err.Error())
 		http.Error(w, "ошибка при генерации токена: "+err.Error(), http.StatusInternalServerError)

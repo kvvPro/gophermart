@@ -370,9 +370,9 @@ func getAllWithdrawalsQuery() string {
 	`
 }
 
-func (s *PostgresStorage) GetOrdersForUpdate(ctx context.Context) ([]*model.Order, error) {
+func (s *PostgresStorage) GetOrdersForUpdate(ctx context.Context) ([]model.Order, error) {
 
-	orders := []*model.Order{}
+	orders := []model.Order{}
 	statusesForUpdate := StatusesForUpdate()
 
 	query := getOrdersForUpdateQuery()
@@ -393,7 +393,7 @@ func (s *PostgresStorage) GetOrdersForUpdate(ctx context.Context) ([]*model.Orde
 		if err != nil {
 			return nil, err
 		}
-		orders = append(orders, &orderInfo)
+		orders = append(orders, orderInfo)
 	}
 
 	err = result.Err()
@@ -427,7 +427,7 @@ func getOrdersForUpdateQuery() string {
 	`
 }
 
-func (s *PostgresStorage) UpdateBatchOrders(ctx context.Context, orders []*model.Order) error {
+func (s *PostgresStorage) UpdateBatchOrders(ctx context.Context, orders []model.Order) error {
 
 	transaction, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -436,7 +436,7 @@ func (s *PostgresStorage) UpdateBatchOrders(ctx context.Context, orders []*model
 	defer transaction.Rollback(ctx)
 
 	for _, el := range orders {
-		err = s.updateOrder(ctx, el)
+		err = s.updateOrder(ctx, &el)
 		if err != nil {
 			return err
 		}

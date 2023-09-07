@@ -49,11 +49,8 @@ func main() {
 	wg := &sync.WaitGroup{}
 
 	asyncCtx, cancelUpdate := context.WithCancel(ctx)
-	// размножим обновления из внешнего сервиса
-	for i := 0; i < srv.UpdateThreadCount; i++ {
-		wg.Add(1)
-		go srv.AsyncUpdate(asyncCtx, wg)
-	}
+	wg.Add(1)
+	go srv.AsyncUpdate(asyncCtx, wg)
 
 	app.Sugar.Infoln("before starting server")
 

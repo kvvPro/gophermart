@@ -71,10 +71,22 @@ func (srv *Server) AsyncUpdate(ctx context.Context, wg *sync.WaitGroup) {
 			ordersForUpdate, _ := srv.RequestAccrual(ctx, orders)
 			// обновляем информацию в нашей системе
 			if len(ordersForUpdate) > 0 {
-				err = srv.UpdateOrders(ctx, ordersForUpdate)
-				if err != nil {
-					Sugar.Errorln(err)
+				// распараллелим обновление заказов
+				batchSize := len(ordersForUpdate) / srv.UpdateThreadCount
+				for i := 0; i < srv.UpdateThreadCount; i++ {
+					end := (i + 1) * batchSize
+					if i == srv.UpdateThreadCount-1 {
+						if len(ordersForUpdate)%srv.UpdateThreadCount != 0 {
+							end = len(ordersForUpdate) - 1
+						}
+					}
+					wg.Add(1)
+					start := i * batchSize
+					go func() {
+						_ = srv.UpdateOrders(ctx, wg, ordersForUpdate[start:end])
+					}()
 				}
+
 			}
 		}
 	}

@@ -11,12 +11,12 @@ import (
 	"github.com/kvvPro/gophermart/internal/model"
 )
 
-func (srv *Server) RequestAccrual(ctx context.Context, orders []*model.Order) ([]*model.Order, error) {
+func (srv *Server) RequestAccrual(ctx context.Context, orders []model.Order) ([]model.Order, error) {
 
 	client := &http.Client{}
 	url := srv.AccrualSystemAddress + "/api/orders/%v"
 
-	ordersForUpdate := []*model.Order{}
+	ordersForUpdate := []model.Order{}
 
 	for _, el := range orders {
 		localURL := fmt.Sprintf(url, el.ID)
@@ -61,7 +61,7 @@ func (srv *Server) RequestAccrual(ctx context.Context, orders []*model.Order) ([
 			newInfo.ID = el.ID
 			newInfo.Owner = el.Owner
 			newInfo.UploadDate = el.UploadDate
-			ordersForUpdate = append(ordersForUpdate, &newInfo)
+			ordersForUpdate = append(ordersForUpdate, newInfo)
 		} else if response.StatusCode == http.StatusNoContent {
 			// данных по заказу нет - можно не обновлять
 			continue
