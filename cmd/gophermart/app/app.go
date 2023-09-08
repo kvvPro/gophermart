@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kvvPro/gophermart/cmd/gophermart/config"
+	"github.com/kvvPro/gophermart/internal/model"
 	"github.com/kvvPro/gophermart/internal/storage"
 
 	"github.com/kvvPro/gophermart/internal/storage/postgres"
@@ -50,6 +51,25 @@ func (srv *Server) AsyncUpdate(ctx context.Context, wg *sync.WaitGroup) {
 
 	defer wg.Done()
 
+	// объявим канал для асинхронного запроса информации по заказам из внешней системы
+	chOrders := make(chan model.Order, 5)
+	chOrdersForUpdate := make(chan model.Order, 10)
+
+	// запускаем горутины для получения инфы из внешней системы
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			srv.threadToGetInfoFromAccrual(ctx, chOrders, chOrdersForUpdate)
+		}()
+	}
+	// поток для обновления информации в нашей системе
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		srv.threadToUpdateOrders(ctx, chOrdersForUpdate)
+	}()
+
 	for {
 		// wait interval
 		select {
@@ -68,29 +88,57 @@ func (srv *Server) AsyncUpdate(ctx context.Context, wg *sync.WaitGroup) {
 		}
 		// запрашиваем статусы у внещней системы
 		if len(orders) > 0 {
-			ordersForUpdate, _ := srv.RequestAccrual(ctx, orders)
-			// обновляем информацию в нашей системе
+			for _, el := range orders {
+				chOrders <- el
+			}
+		}
+	}
+}
+
+func (srv *Server) threadToGetInfoFromAccrual(ctx context.Context,
+	chOrders chan model.Order,
+	chOrdersForUpdate chan model.Order) {
+
+	for {
+		select {
+		case order, opened := <-chOrders:
+			if !opened {
+				// channel is closed
+				return
+			}
+			updatedOrder, needToUpdate := srv.RequestAccrual(ctx, order)
+			if needToUpdate {
+				chOrdersForUpdate <- *updatedOrder
+			}
+		case <-ctx.Done():
+			Sugar.Infoln("остановка асинхронного обновления")
+			return
+		}
+	}
+
+}
+
+func (srv *Server) threadToUpdateOrders(ctx context.Context,
+	chOrdersForUpdate chan model.Order) {
+
+	ordersForUpdate := []model.Order{}
+
+	for {
+		select {
+		case <-time.After(time.Duration(srv.ReadingAccrualInterval) * time.Second):
+		case order, opened := <-chOrdersForUpdate:
+			if !opened {
+				// channel is closed
+				return
+			}
+			ordersForUpdate = append(ordersForUpdate, order)
 			length := len(ordersForUpdate)
 			if length > 0 {
-				// распараллелим обновление заказов
-				batchSize := length / srv.UpdateThreadCount
-				for i := 0; i < srv.UpdateThreadCount; i++ {
-					start := i * batchSize
-					end := (i + 1) * batchSize
-					batchForUpdate := ordersForUpdate[start:end]
-					if i == srv.UpdateThreadCount-1 {
-						if length%srv.UpdateThreadCount != 0 {
-							batchForUpdate = ordersForUpdate[start:]
-						}
-					}
-
-					wg.Add(1)
-					go func() {
-						_ = srv.UpdateOrders(ctx, wg, batchForUpdate)
-					}()
-				}
-
+				_ = srv.UpdateOrders(ctx, ordersForUpdate)
 			}
+		case <-ctx.Done():
+			Sugar.Infoln("остановка асинхронного обновления")
+			return
 		}
 	}
 }

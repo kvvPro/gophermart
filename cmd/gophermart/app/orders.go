@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgerrcode"
@@ -121,8 +120,7 @@ func (srv *Server) GetOrdersForUpdate(ctx context.Context) ([]model.Order, error
 	return orders, nil
 }
 
-func (srv *Server) UpdateOrders(ctx context.Context, wg *sync.WaitGroup, orders []model.Order) error {
-	defer wg.Done()
+func (srv *Server) UpdateOrders(ctx context.Context, orders []model.Order) error {
 
 	var err error
 
